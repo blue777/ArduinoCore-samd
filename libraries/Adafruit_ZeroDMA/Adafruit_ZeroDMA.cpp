@@ -285,6 +285,7 @@ ZeroDMAstatus Adafruit_ZeroDMA::free(void) {
         }
         _dmaPtr[channel] = NULL;
         channel          = 0xFF;
+        hasDescriptors   = false;
     } else {
         status = DMA_STATUS_ERR_NOT_INITIALIZED; // Channel not in use
     }
