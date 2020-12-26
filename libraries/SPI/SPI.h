@@ -56,7 +56,7 @@
   #if !defined(MAX_SPI)
     #define MAX_SPI 12000000
   #endif
-  #define SPI_MIN_CLOCK_DIVIDER (uint8_t)(1 + ((F_CPU - 1) / MAX_SPI))
+  #define SPI_MIN_CLOCK_DIVIDER 2
 #endif
 
 class SPISettings {
