@@ -166,6 +166,42 @@ seeed_XIAO_m0.menu.debug.on=On
 seeed_XIAO_m0.menu.debug.on.build.flags.debug=-g -DDEBUG=1
 
 
+# Seeed XIAO M0 (SAMD21) I2S
+# ------------------------------
+seeed_XIAO_m0_i2s.name=Seeeduino XIAO I2S
+seeed_XIAO_m0_i2s.vid.0=0x2886
+seeed_XIAO_m0_i2s.pid.0=0x802F
+seeed_XIAO_m0_i2s.vid.1=0x2886
+seeed_XIAO_m0_i2s.pid.1=0x002F
+seeed_XIAO_m0_i2s.upload.tool=bossac
+seeed_XIAO_m0_i2s.upload.protocol=sam-ba
+seeed_XIAO_m0_i2s.upload.maximum_size=262144
+seeed_XIAO_m0_i2s.upload.offset=0x2000
+seeed_XIAO_m0_i2s.upload.use_1200bps_touch=true
+seeed_XIAO_m0_i2s.upload.wait_for_upload_port=true
+seeed_XIAO_m0_i2s.upload.native_usb=true
+seeed_XIAO_m0_i2s.build.mcu=cortex-m0plus
+seeed_XIAO_m0_i2s.build.f_cpu=48000000L
+seeed_XIAO_m0_i2s.build.usb_product="Seeed XIAO M0"
+seeed_XIAO_m0_i2s.build.usb_manufacturer="Seeed"
+seeed_XIAO_m0_i2s.build.board=SEEED_XIAO_M0
+seeed_XIAO_m0_i2s.build.core=arduino
+seeed_XIAO_m0_i2s.build.extra_flags= -DARDUINO_SAMD_ZERO -D__SAMD21__ -D__SAMD21G18A__ -DARM_MATH_CM0PLUS -DSEEED_XIAO_M0 {build.usb_flags}
+seeed_XIAO_m0_i2s.build.ldscript=linker_scripts/gcc/flash_with_bootloader.ld
+seeed_XIAO_m0_i2s.build.openocdscript=openocd_scripts/XIAO_m0.cfg
+seeed_XIAO_m0_i2s.build.variant=XIAO_m0_i2s
+seeed_XIAO_m0_i2s.build.variant_system_lib=
+seeed_XIAO_m0_i2s.build.vid=0x2886
+seeed_XIAO_m0_i2s.build.pid=0x802F
+seeed_XIAO_m0_i2s.bootloader.tool=openocd
+seeed_XIAO_m0_i2s.bootloader.file=XIAOM0/bootloader-XIAO_m0-v3.7.0-33-g90ff611-dirty.bin
+seeed_XIAO_m0_i2s.menu.usbstack.arduino=Arduino
+seeed_XIAO_m0_i2s.menu.usbstack.tinyusb=TinyUSB
+seeed_XIAO_m0_i2s.menu.usbstack.tinyusb.build.flags.usbstack=-DUSE_TINYUSB
+seeed_XIAO_m0_i2s.menu.debug.off=Off
+seeed_XIAO_m0_i2s.menu.debug.on=On
+seeed_XIAO_m0_i2s.menu.debug.on.build.flags.debug=-g -DDEBUG=1
+
 # Seeed XIAO M0 (SAMD21)
 # ------------------------------
 Wio_Lite_MG126.name=Seeeduino Wio lite MG126

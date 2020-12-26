@@ -136,10 +136,10 @@ static const uint8_t SCK  = PIN_SPI_SCK ;
 #define WIRE_INTERFACES_COUNT 1
 
   // "external" public i2c interface
-#define PIN_WIRE_SDA         (4u)
-#define PIN_WIRE_SCL         (5u)
-#define PERIPH_WIRE          sercom2
-#define WIRE_IT_HANDLER      SERCOM2_Handler
+#define PIN_WIRE_SDA         (6u)
+#define PIN_WIRE_SCL         (7u)
+#define PERIPH_WIRE          sercom4
+#define WIRE_IT_HANDLER      SERCOM4_Handler
 static const uint8_t SDA = PIN_WIRE_SDA;
 static const uint8_t SCL = PIN_WIRE_SCL;
 
@@ -151,7 +151,17 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 
 // I2S Interfaces
 // --------------
-#define I2S_INTERFACES_COUNT 0
+#define I2S_INTERFACES_COUNT 2
+
+//#define I2S_DEVICE           0
+#define I2S_DEVICE_CLK       0
+#define I2S_DEVICE_SER       1
+#define I2S_CLOCK_GENERATOR  3
+#define PIN_I2S_SD           (4u) // PA08:I2S/SD[1]
+//#define PIN_I2S_SD           (8u) // PA07:I2S/SD[0]
+#define PIN_I2S_SCK          (2u) // PA10:I2S/SCK[0]
+#define PIN_I2S_FS           (3u) // PA11:I2S/FS[0]
+#define PIN_I2S_MCK          (5u)	// PA09:I2S/MCK[0] Not impl
 
 // Serial ports
 // ------------
