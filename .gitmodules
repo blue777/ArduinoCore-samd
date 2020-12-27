@@ -11,3 +11,7 @@
 [submodule "libraries/Seeed_Arduino_FreeRTOS"]
 	path = libraries/Seeed_Arduino_FreeRTOS
 	url = https://github.com/Seeed-Studio/Seeed_Arduino_FreeRTOS
+[submodule "libraries/Seeed_Arduino_FS"]
+	path = libraries/Seeed_Arduino_FS
+	url = https://github.com/blue777/Seeed_Arduino_FS
+	branch = xiao_dap
