@@ -116,14 +116,13 @@ private:
   uint8_t _sckPin;
   uint8_t _fsPin;
 
-  i2s_state_t _state;
+  i2s_state_t		_state;
+  int8_t			_bitsPerSample;
   I2S_DMA           _dma;
   DmacDescriptor*   _dmaDesc;
-  int _dmaChannel;
-  int _bitsPerSample;
-
-  volatile bool _dmaTransferInProgress;
-  I2SDoubleBuffer _doubleBuffer;
+  I2SDoubleBuffer	_doubleBuffer;
+  int8_t			_dmaChannel;
+  volatile bool		_dmaTransferInProgress;
 
   void (*_onTransmit)(void);
   void (*_onReceive)(void);

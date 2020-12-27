@@ -46,11 +46,11 @@ public:
 
 private:
   uint8_t       _buffer[I2S_BUFFER_NUM][I2S_BUFFER_SIZE];
-  volatile int  _length[I2S_BUFFER_NUM];
-  volatile int _readIndex; 
-  volatile int _readOffset;
-  volatile int _writeIndex; 
-  volatile int _writeOffset;
+  volatile uint16_t  _length[I2S_BUFFER_NUM];
+  volatile uint8_t _readIndex; 
+  volatile uint8_t _writeIndex; 
+  volatile uint16_t _readOffset;
+  volatile uint16_t _writeOffset;
 };
 
 #endif
