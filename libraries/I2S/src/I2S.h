@@ -22,6 +22,7 @@
 #include <Arduino.h>
 
 #include "utility/I2SDoubleBuffer.h"
+#include <Adafruit_ZeroDMA.h>
 
 typedef enum {
   I2S_PHILIPS_MODE,
@@ -33,7 +34,7 @@ class I2SClass : public Stream
 {
 public:
   // the device index and pins must map to the "COM" pads in Table 6-1 of the datasheet 
-  I2SClass(uint8_t deviceIndex, uint8_t clockGenerator, uint8_t sdPin, uint8_t sckPin, uint8_t fsPin);
+  I2SClass(uint8_t deviceClkIndex, uint8_t deviceSerIndex, uint8_t clockGenerator, uint8_t sdPin, uint8_t sckPin, uint8_t fsPin);
 
   // the SCK and FS pins are driven as outputs using the sample rate
   int begin(int mode, long sampleRate, int bitsPerSample);
@@ -58,6 +59,8 @@ public:
   size_t write(int);
   size_t write(int32_t);
   size_t write(const void *buffer, size_t size);
+  uint8_t*	write_buffer_lock();
+  void		write_buffer_release( size_t length );
 
   void onTransmit(void(*)(void));
   void onReceive(void(*)(void));
@@ -73,7 +76,7 @@ private:
 
   void onTransferComplete(void);
 
-  static void onDmaTransferComplete(int);
+  static void onDmaTransferComplete(Adafruit_ZeroDMA * dma);
 
 private:
   typedef enum {
@@ -84,13 +87,16 @@ private:
 
   static int _beginCount;
 
-  uint8_t _deviceIndex;
+  uint8_t _deviceClkIndex;
+  uint8_t _deviceSerIndex;
   uint8_t _clockGenerator;
   uint8_t _sdPin;
   uint8_t _sckPin;
   uint8_t _fsPin;
 
   i2s_state_t _state;
+  Adafruit_ZeroDMA  _dma;
+  DmacDescriptor*   _dmaDesc;
   int _dmaChannel;
   int _bitsPerSample;
 

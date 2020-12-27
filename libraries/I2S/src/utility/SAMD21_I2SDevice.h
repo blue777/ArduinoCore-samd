@@ -123,8 +123,8 @@ public:
     i2s.SERCTRL[index].bit.SLOTADJ = I2S_SERCTRL_SLOTADJ_LEFT_Val;
   }
 
-  inline void setClockUnit(int index) {
-    i2s.SERCTRL[index].bit.CLKSEL = (index == 0) ? I2S_SERCTRL_CLKSEL_CLK0_Val : I2S_SERCTRL_CLKSEL_CLK1_Val;
+  inline void setClockUnit(int indexSer, int indexClk) {
+    i2s.SERCTRL[indexSer].bit.CLKSEL = (indexClk == 0) ? I2S_SERCTRL_CLKSEL_CLK0_Val : I2S_SERCTRL_CLKSEL_CLK1_Val;
   }
 
   inline void setTxMode(int index) {

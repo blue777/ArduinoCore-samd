@@ -22,7 +22,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define I2S_BUFFER_SIZE 512
+#define I2S_BUFFER_SIZE   8192
+#define I2S_BUFFER_NUM    2
 
 class I2SDoubleBuffer
 {
@@ -34,17 +35,22 @@ public:
 
   size_t availableForWrite();
   size_t write(const void *buffer, size_t size);
+  uint8_t*  write_buffer_lock();
+  void   write_buffer_release( size_t length );
+  
   size_t read(void *buffer, size_t size);
   size_t peek(void *buffer, size_t size);
-  void* data();
-  size_t available();
-  void swap(int length = 0);
+  size_t availableForRead();
+  uint8_t*  read_buffer_lock();
+  void   read_buffer_release();
 
 private:
-  uint8_t _buffer[2][I2S_BUFFER_SIZE];
-  volatile int _length[2];
-  volatile int _readOffset[2];
-  volatile int _index; 
+  uint8_t       _buffer[I2S_BUFFER_NUM][I2S_BUFFER_SIZE];
+  volatile int  _length[I2S_BUFFER_NUM];
+  volatile int _readIndex; 
+  volatile int _readOffset;
+  volatile int _writeIndex; 
+  volatile int _writeOffset;
 };
 
 #endif

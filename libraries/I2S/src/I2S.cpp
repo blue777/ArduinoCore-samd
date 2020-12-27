@@ -19,7 +19,6 @@
 #include <Arduino.h>
 #include <wiring_private.h>
 
-#include "utility/DMA.h"
 
 #if defined(__SAMD51__)
 
@@ -39,8 +38,9 @@ static I2SDevice_SAMD21G18x i2sd(*I2S);
 
 int I2SClass::_beginCount = 0;
 
-I2SClass::I2SClass(uint8_t deviceIndex, uint8_t clockGenerator, uint8_t sdPin, uint8_t sckPin, uint8_t fsPin) :
-  _deviceIndex(deviceIndex),
+I2SClass::I2SClass(uint8_t deviceClkIndex, uint8_t deviceSerIndex, uint8_t clockGenerator, uint8_t sdPin, uint8_t sckPin, uint8_t fsPin) :
+  _deviceClkIndex(deviceClkIndex),
+  _deviceSerIndex(deviceSerIndex),
   _clockGenerator(clockGenerator),
   _sdPin(sdPin),
   _sckPin(sckPin),
@@ -52,7 +52,8 @@ I2SClass::I2SClass(uint8_t deviceIndex, uint8_t clockGenerator, uint8_t sdPin, u
   _dmaTransferInProgress(false),
 
   _onTransmit(NULL),
-  _onReceive(NULL)
+  _onReceive(NULL),
+  _dmaDesc(NULL)
 {
 }
 
@@ -98,9 +99,11 @@ int I2SClass::begin(int mode, long sampleRate, int bitsPerSample, bool driveCloc
   }
 
   // try to allocate a DMA channel
-  DMA.begin();
-
-  _dmaChannel = DMA.allocateChannel();
+  if( DMA_STATUS_OK == _dma.allocate() )
+  {
+    // no DMA channel available
+    _dmaChannel = _dma.getChannel();
+  }
 
   if (_dmaChannel < 0) {
     // no DMA channel available
@@ -125,36 +128,36 @@ int I2SClass::begin(int mode, long sampleRate, int bitsPerSample, bool driveCloc
     // set up clock
     enableClock(sampleRate * 2 * bitsPerSample);
 
-    i2sd.setSerialClockSelectMasterClockDiv(_deviceIndex);
-    i2sd.setFrameSyncSelectSerialClockDiv(_deviceIndex);
+    i2sd.setSerialClockSelectMasterClockDiv(_deviceClkIndex);
+    i2sd.setFrameSyncSelectSerialClockDiv(_deviceClkIndex);
   } else {
     // use input signal from SCK and FS pins
-    i2sd.setSerialClockSelectPin(_deviceIndex);
-    i2sd.setFrameSyncSelectPin(_deviceIndex);
+    i2sd.setSerialClockSelectPin(_deviceClkIndex);
+    i2sd.setFrameSyncSelectPin(_deviceClkIndex);
   }
 
   // disable device before continuing
   i2sd.disable();
 
   if (mode == I2S_PHILIPS_MODE) {
-    i2sd.set1BitDelay(_deviceIndex);
+    i2sd.set1BitDelay(_deviceClkIndex);
   } else {
-    i2sd.set0BitDelay(_deviceIndex);
+    i2sd.set0BitDelay(_deviceClkIndex);
   }
-  i2sd.setNumberOfSlots(_deviceIndex, 1);
-  i2sd.setSlotSize(_deviceIndex, bitsPerSample);
-  i2sd.setDataSize(_deviceIndex, bitsPerSample);
+  i2sd.setNumberOfSlots(_deviceClkIndex, 1);
+  i2sd.setSlotSize(_deviceClkIndex, bitsPerSample);
+  i2sd.setDataSize(_deviceSerIndex, bitsPerSample);
 
   pinPeripheral(_sckPin, PIO_COM);
   pinPeripheral(_fsPin, PIO_COM);
 
   if (mode == I2S_RIGHT_JUSTIFIED_MODE) {
-    i2sd.setSlotAdjustedRight(_deviceIndex);
+    i2sd.setSlotAdjustedRight(_deviceSerIndex);
   } else {
-    i2sd.setSlotAdjustedLeft(_deviceIndex);
+    i2sd.setSlotAdjustedLeft(_deviceSerIndex);
   }
 
-  i2sd.setClockUnit(_deviceIndex);
+  i2sd.setClockUnit(_deviceSerIndex,_deviceClkIndex);
 
   pinPeripheral(_sdPin, PIO_COM);
 
@@ -169,14 +172,19 @@ int I2SClass::begin(int mode, long sampleRate, int bitsPerSample, bool driveCloc
 void I2SClass::end()
 {
   if (_dmaChannel > -1) {
-    DMA.freeChannel(_dmaChannel);
+    while( DMA_STATUS_BUSY == _dma.free() )
+    {
+      delay(1);
+    }
+
+    _dmaDesc  = NULL;
   }
 
   _state = I2S_STATE_IDLE;
   _dmaTransferInProgress = false;
 
-  i2sd.disableSerializer(_deviceIndex);
-  i2sd.disableClockUnit(_deviceIndex);
+  i2sd.disableSerializer(_deviceSerIndex);
+  i2sd.disableClockUnit(_deviceClkIndex);
 
   // set the pins back to input mode
   pinMode(_sdPin, INPUT);
@@ -206,21 +214,23 @@ int I2SClass::available()
   }
 
   uint8_t enableInterrupts = ((__get_PRIMASK() & 0x1) == 0);
-  size_t avail;
 
   // disable interrupts,
   __disable_irq();
 
-  avail = _doubleBuffer.available();
+  size_t writable = _doubleBuffer.availableForWrite();
 
-  if (_dmaTransferInProgress == false && _doubleBuffer.available() == 0) {
+  if (_dmaTransferInProgress == false && (0 < writable) ) {
     // no DMA transfer in progress, start a receive process
     _dmaTransferInProgress = true;
 
-    DMA.transfer(_dmaChannel, i2sd.data(_deviceIndex), _doubleBuffer.data(), _doubleBuffer.availableForWrite());
+   _dma.changeDescriptor(
+      _dmaDesc,
+      i2sd.data(_deviceSerIndex),                // move data from here
+      _doubleBuffer.write_buffer_lock(),
+      writable / (_bitsPerSample >> 3) );
 
-    // switch to the next buffer for user output (will be empty)
-    _doubleBuffer.swap();
+    _dma.startJob();
   }
 
   if (enableInterrupts) {
@@ -228,7 +238,7 @@ int I2SClass::available()
     __enable_irq();
   }
 
-  return avail;
+  return _doubleBuffer.availableForRead();
 }
 
 union i2s_sample_t {
@@ -301,25 +311,48 @@ size_t I2SClass::write(const uint8_t *buffer, size_t size)
 
 int I2SClass::availableForWrite()
 {
+  return _doubleBuffer.availableForWrite();
+}
+
+uint8_t*	I2SClass::write_buffer_lock()
+{
+  return  _doubleBuffer.write_buffer_lock();
+}
+
+void		I2SClass::write_buffer_release( size_t length )
+{
+  _doubleBuffer.write_buffer_release(length);
+
   if (_state != I2S_STATE_TRANSMITTER) {
     enableTransmitter();
   }
 
   uint8_t enableInterrupts = ((__get_PRIMASK() & 0x1) == 0);
-  size_t space;
 
   // disable interrupts,
   __disable_irq();
 
-  space = _doubleBuffer.availableForWrite();
+  size_t  avail = _doubleBuffer.availableForRead();
+  if (_dmaTransferInProgress == false && (0 < avail) ) {
+    // no DMA transfer in progress, start a transmit process
+    _dmaTransferInProgress = true;
+
+    _dma.changeDescriptor(
+      _dmaDesc,
+      _doubleBuffer.read_buffer_lock(),                // move data from here
+      i2sd.data(_deviceSerIndex),
+      avail / (_bitsPerSample >> 3) );
+
+    _dma.startJob();
+  }
 
   if (enableInterrupts) {
     // re-enable the interrupts
     __enable_irq();
   }
-
-  return space;
 }
+
+
 
 int I2SClass::read(void* buffer, size_t size)
 {
@@ -327,21 +360,24 @@ int I2SClass::read(void* buffer, size_t size)
     enableReceiver();
   }
 
+  int read = _doubleBuffer.read(buffer, size);
+
   uint8_t enableInterrupts = ((__get_PRIMASK() & 0x1) == 0);
 
   // disable interrupts,
   __disable_irq();
-
-  int read = _doubleBuffer.read(buffer, size);
-
-  if (_dmaTransferInProgress == false && _doubleBuffer.available() == 0) {
+  size_t  writable  = _doubleBuffer.availableForWrite();
+  if (_dmaTransferInProgress == false &&  (0 < writable)) {
     // no DMA transfer in progress, start a receive process
     _dmaTransferInProgress = true;
 
-    DMA.transfer(_dmaChannel, i2sd.data(_deviceIndex), _doubleBuffer.data(), _doubleBuffer.availableForWrite());
+    _dma.changeDescriptor(
+      _dmaDesc,
+      i2sd.data(_deviceSerIndex),                // move data from here
+      _doubleBuffer.write_buffer_lock(),
+      writable / (_bitsPerSample >> 3) );
 
-    // switch to the next buffer for user output (will be empty)
-    _doubleBuffer.swap();
+    _dma.startJob();
   }
 
   if (enableInterrupts) {
@@ -364,11 +400,11 @@ size_t I2SClass::write(int32_t sample)
   }
 
   // this is a blocking write
-  while(!i2sd.txReady(_deviceIndex));
+  while(!i2sd.txReady(_deviceSerIndex));
 
-  i2sd.writeData(_deviceIndex, sample);
+  i2sd.writeData(_deviceSerIndex, sample);
 
-  i2sd.clearTxReady(_deviceIndex);
+  i2sd.clearTxReady(_deviceSerIndex);
 
   return 1;
 }
@@ -379,22 +415,25 @@ size_t I2SClass::write(const void *buffer, size_t size)
     enableTransmitter();
   }
 
+  size_t written = _doubleBuffer.write(buffer, size);
+
   uint8_t enableInterrupts = ((__get_PRIMASK() & 0x1) == 0);
-  size_t written;
 
   // disable interrupts,
   __disable_irq();
 
-  written = _doubleBuffer.write(buffer, size);
-
-  if (_dmaTransferInProgress == false && _doubleBuffer.available()) {
+  size_t  avail = _doubleBuffer.availableForRead();
+  if (_dmaTransferInProgress == false && (0 < avail) ) {
     // no DMA transfer in progress, start a transmit process
     _dmaTransferInProgress = true;
 
-    DMA.transfer(_dmaChannel, _doubleBuffer.data(), i2sd.data(_deviceIndex), _doubleBuffer.available());
+    _dma.changeDescriptor(
+      _dmaDesc,
+      _doubleBuffer.read_buffer_lock(),                // move data from here
+      i2sd.data(_deviceSerIndex),
+      avail / (_bitsPerSample >> 3) );
 
-    // switch to the next buffer for input
-    _doubleBuffer.swap();
+    _dma.startJob();
   }
 
   if (enableInterrupts) {
@@ -440,7 +479,7 @@ void I2SClass::enableClock(int divider)
 
   // enable
   while (GCLK->STATUS.bit.SYNCBUSY);
-  GCLK->CLKCTRL.bit.ID = i2sd.glckId(_deviceIndex);
+  GCLK->CLKCTRL.bit.ID = i2sd.glckId(_deviceClkIndex);
   GCLK->CLKCTRL.bit.GEN = _clockGenerator;
   GCLK->CLKCTRL.bit.CLKEN = 1;
 
@@ -456,7 +495,7 @@ void I2SClass::disableClock()
   GCLK->GENCTRL.bit.GENEN = 0;
 
   while (GCLK->STATUS.bit.SYNCBUSY);
-  GCLK->CLKCTRL.bit.ID = i2sd.glckId(_deviceIndex);
+  GCLK->CLKCTRL.bit.ID = i2sd.glckId(_deviceClkIndex);
   GCLK->CLKCTRL.bit.GEN = _clockGenerator;
   GCLK->CLKCTRL.bit.CLKEN = 0;
 
@@ -465,28 +504,44 @@ void I2SClass::disableClock()
 
 void I2SClass::enableTransmitter()
 {
-  i2sd.setTxMode(_deviceIndex);
-  i2sd.enableClockUnit(_deviceIndex);
-  i2sd.enableSerializer(_deviceIndex);
+  i2sd.setTxMode(_deviceSerIndex);
+  i2sd.enableClockUnit(_deviceClkIndex);
+  i2sd.enableSerializer(_deviceSerIndex);
 
-  DMA.incSrc(_dmaChannel);
-  DMA.onTransferComplete(_dmaChannel, I2SClass::onDmaTransferComplete);
-  DMA.setTriggerSource(_dmaChannel, i2sd.dmaTriggerSource(_deviceIndex));
-  DMA.setTransferWidth(_dmaChannel, _bitsPerSample);
+  _dma.setCallback( I2SClass::onDmaTransferComplete );
+  _dma.setTrigger(i2sd.dmaTriggerSource(_deviceSerIndex));
+  _dma.setAction(DMA_TRIGGER_ACTON_BEAT);
+
+  _dmaDesc = _dma.addDescriptor(
+    _doubleBuffer.read_buffer_lock(),                // move data from here
+    i2sd.data(_deviceSerIndex),
+    _doubleBuffer.availableForRead() / (_bitsPerSample >> 3),            // this many...
+    (enum dma_beat_size)(_bitsPerSample >> 4),  //  DMA_BEAT_SIZE_WORD,                  // bytes/hword/words
+    true,                                // increment source addr?
+    false,                                // increment dest addr?
+    DMA_ADDRESS_INCREMENT_STEP_SIZE_1, 
+    DMA_STEPSEL_SRC);
 
   _state = I2S_STATE_TRANSMITTER;
 }
 
 void I2SClass::enableReceiver()
 {
-  i2sd.setRxMode(_deviceIndex);
-  i2sd.enableClockUnit(_deviceIndex);
-  i2sd.enableSerializer(_deviceIndex);
+  i2sd.setRxMode(_deviceSerIndex);
+  i2sd.enableClockUnit(_deviceClkIndex);
+  i2sd.enableSerializer(_deviceSerIndex);
 
-  DMA.incDst(_dmaChannel);
-  DMA.onTransferComplete(_dmaChannel, I2SClass::onDmaTransferComplete);
-  DMA.setTriggerSource(_dmaChannel, i2sd.dmaTriggerSource(_deviceIndex));
-  DMA.setTransferWidth(_dmaChannel, _bitsPerSample);
+  _dma.setCallback( I2SClass::onDmaTransferComplete );
+  _dma.setTrigger(i2sd.dmaTriggerSource(_deviceSerIndex));
+  _dma.setAction(DMA_TRIGGER_ACTON_BEAT);
+
+  _dmaDesc = _dma.addDescriptor(
+      i2sd.data(_deviceSerIndex),                // move data from here
+      _doubleBuffer.write_buffer_lock(),
+      _doubleBuffer.availableForWrite() / (_bitsPerSample >> 3),   // this many...
+      (enum dma_beat_size)(_bitsPerSample >> 4),  // DMA_BEAT_SIZE_WORD,                  // bytes/hword/words
+      false,                               // increment source addr?
+      true);                               // increment dest addr?
 
   _state = I2S_STATE_RECEIVER;
 }
@@ -495,14 +550,19 @@ void I2SClass::onTransferComplete(void)
 {
   if (_state == I2S_STATE_TRANSMITTER) {
     // transmit complete
+    _doubleBuffer.read_buffer_release();
 
-    if (_doubleBuffer.available()) {
+    size_t  avail = _doubleBuffer.availableForRead();
+    if ( 0 < avail ) {
       // output is available to transfer, start the DMA process for the current buffer
 
-      DMA.transfer(_dmaChannel, _doubleBuffer.data(), i2sd.data(_deviceIndex), _doubleBuffer.available());
+      _dma.changeDescriptor(
+        _dmaDesc,
+        _doubleBuffer.read_buffer_lock(),                // move data from here
+        i2sd.data(_deviceSerIndex),
+        avail / (_bitsPerSample >> 3) );
 
-      // swap to the next user buffer for input
-      _doubleBuffer.swap();
+      _dma.startJob();
     } else {
       // no user data buffered to send
       _dmaTransferInProgress = false;
@@ -514,13 +574,18 @@ void I2SClass::onTransferComplete(void)
     }
   } else {
     // receive complete
+    _doubleBuffer.write_buffer_release(_doubleBuffer.availableForWrite());
 
-    if (_doubleBuffer.available() == 0) {
+    size_t  avail = _doubleBuffer.availableForWrite();
+    if ( 0< avail ) {
       // the user has read all the current input, start the DMA process to fill it again
-      DMA.transfer(_dmaChannel, i2sd.data(_deviceIndex), _doubleBuffer.data(), _doubleBuffer.availableForWrite());
+     _dma.changeDescriptor(
+        _dmaDesc, 
+        i2sd.data(_deviceSerIndex),                // move data from here
+        _doubleBuffer.write_buffer_lock(),
+        avail / (_bitsPerSample >> 3) );
 
-      // swap to the next buffer that has previously been filled, so that the user can read it
-      _doubleBuffer.swap(_doubleBuffer.availableForWrite());
+      _dma.startJob();
     } else {
       // user has not read current data, no free buffer to transfer into
       _dmaTransferInProgress = false;
@@ -533,15 +598,24 @@ void I2SClass::onTransferComplete(void)
   }
 }
 
-void I2SClass::onDmaTransferComplete(int channel)
+void I2SClass::onDmaTransferComplete(Adafruit_ZeroDMA * dma)
 {
 #if I2S_INTERFACES_COUNT > 0
-  if (I2S._dmaChannel == channel) {
+  if (I2S._dmaChannel == dma->getChannel()) {
     I2S.onTransferComplete();
   }
 #endif
 }
 
 #if I2S_INTERFACES_COUNT > 0
-I2SClass I2S(I2S_DEVICE, I2S_CLOCK_GENERATOR, PIN_I2S_SD, PIN_I2S_SCK, PIN_I2S_FS);
+
+#ifndef I2S_DEVICE_CLK
+#define I2S_DEVICE_CLK       I2S_DEVICE
+#endif
+
+#ifndef I2S_DEVICE_SER
+#define I2S_DEVICE_SER       I2S_DEVICE
+#endif
+
+I2SClass I2S(I2S_DEVICE_CLK, I2S_DEVICE_SER, I2S_CLOCK_GENERATOR, PIN_I2S_SD, PIN_I2S_SCK, PIN_I2S_FS);
 #endif
