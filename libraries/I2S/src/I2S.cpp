@@ -38,14 +38,14 @@ static I2SDevice_SAMD21G18x i2sd(*I2S);
 
 int I2SClass::_beginCount = 0;
 
-I2SClass::I2SClass(uint8_t deviceClkIndex, uint8_t deviceSerIndex, uint8_t clockGenerator, uint8_t sdPin, uint8_t sckPin, uint8_t fsPin) :
-  _deviceClkIndex(deviceClkIndex),
+I2SClass::I2SClass(uint8_t deviceSerIndex, uint8_t deviceClkIndex, uint8_t clockGenerator, uint8_t sdPin, uint8_t sckPin, uint8_t fsPin) :
   _deviceSerIndex(deviceSerIndex),
+  _deviceClkIndex(deviceClkIndex),
   _clockGenerator(clockGenerator),
   _sdPin(sdPin),
   _sckPin(sckPin),
   _fsPin(fsPin),
-
+  _dma(this),
   _state(I2S_STATE_IDLE),
   _dmaChannel(-1),
   _bitsPerSample(0),
@@ -600,22 +600,16 @@ void I2SClass::onTransferComplete(void)
 
 void I2SClass::onDmaTransferComplete(Adafruit_ZeroDMA * dma)
 {
-#if I2S_INTERFACES_COUNT > 0
-  if (I2S._dmaChannel == dma->getChannel()) {
-    I2S.onTransferComplete();
+  I2SClass*	i2s	= ((I2S_DMA*)dma)->_i2s;
+  if( i2s->_dmaChannel == dma->getChannel() )
+  {
+    i2s->onTransferComplete();
   }
-#endif
 }
 
+/*
 #if I2S_INTERFACES_COUNT > 0
-
-#ifndef I2S_DEVICE_CLK
-#define I2S_DEVICE_CLK       I2S_DEVICE
+I2SClass I2S;
 #endif
+*/
 
-#ifndef I2S_DEVICE_SER
-#define I2S_DEVICE_SER       I2S_DEVICE
-#endif
-
-I2SClass I2S(I2S_DEVICE_CLK, I2S_DEVICE_SER, I2S_CLOCK_GENERATOR, PIN_I2S_SD, PIN_I2S_SCK, PIN_I2S_FS);
-#endif

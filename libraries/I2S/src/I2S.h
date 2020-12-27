@@ -30,11 +30,21 @@ typedef enum {
   I2S_LEFT_JUSTIFIED_MODE
 } i2s_mode_t;
 
+
+#ifndef I2S_DEVICE_CLK
+#define I2S_DEVICE_CLK       I2S_DEVICE
+#endif
+
+#ifndef I2S_DEVICE_SER
+#define I2S_DEVICE_SER       I2S_DEVICE
+#endif
+
+
 class I2SClass : public Stream
 {
 public:
   // the device index and pins must map to the "COM" pads in Table 6-1 of the datasheet 
-  I2SClass(uint8_t deviceClkIndex, uint8_t deviceSerIndex, uint8_t clockGenerator, uint8_t sdPin, uint8_t sckPin, uint8_t fsPin);
+  I2SClass(uint8_t deviceSerIndex=I2S_DEVICE_SER, uint8_t deviceClkIndex=I2S_DEVICE_CLK, uint8_t clockGenerator=I2S_CLOCK_GENERATOR, uint8_t sdPin=PIN_I2S_SD, uint8_t sckPin=PIN_I2S_SCK, uint8_t fsPin=PIN_I2S_FS);
 
   // the SCK and FS pins are driven as outputs using the sample rate
   int begin(int mode, long sampleRate, int bitsPerSample);
@@ -79,6 +89,18 @@ private:
   static void onDmaTransferComplete(Adafruit_ZeroDMA * dma);
 
 private:
+  class I2S_DMA : public Adafruit_ZeroDMA
+  {
+  public:
+    I2S_DMA( I2SClass * i2s ) :
+      _i2s(i2s)
+    {
+    }
+
+  public:
+    I2SClass* _i2s;
+  };
+
   typedef enum {
     I2S_STATE_IDLE,
     I2S_STATE_TRANSMITTER,
@@ -95,7 +117,7 @@ private:
   uint8_t _fsPin;
 
   i2s_state_t _state;
-  Adafruit_ZeroDMA  _dma;
+  I2S_DMA           _dma;
   DmacDescriptor*   _dmaDesc;
   int _dmaChannel;
   int _bitsPerSample;
