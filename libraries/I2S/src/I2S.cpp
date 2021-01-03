@@ -139,23 +139,36 @@ int I2SClass::begin(int mode, long sampleRate, int bitsPerSample, bool driveCloc
   // disable device before continuing
   i2sd.disable();
 
-  if (mode == I2S_PHILIPS_MODE) {
-    i2sd.set1BitDelay(_deviceClkIndex);
-  } else {
+  switch( mode )
+  {
+  case I2S_RIGHT_JUSTIFIED_MODE:
+    i2sd.setSlotAdjustedRight(_deviceSerIndex);
     i2sd.set0BitDelay(_deviceClkIndex);
+    i2sd.setFsInv(_deviceClkIndex,false);
+    break;
+
+  case I2S_LEFT_JUSTIFIED_MODE:
+    i2sd.setSlotAdjustedLeft(_deviceSerIndex);
+    i2sd.set0BitDelay(_deviceClkIndex);
+    i2sd.setFsInv(_deviceClkIndex,false);
+    break;
+
+  case I2S_PHILIPS_MODE:
+  default:
+    i2sd.setSlotAdjustedLeft(_deviceSerIndex);
+    i2sd.set1BitDelay(_deviceClkIndex);
+    i2sd.setFsInv(_deviceClkIndex,true);
+    break;
   }
+
+  i2sd.setTxUnderunMode(_deviceSerIndex, true);
+
   i2sd.setNumberOfSlots(_deviceClkIndex, 1);
   i2sd.setSlotSize(_deviceClkIndex, bitsPerSample);
   i2sd.setDataSize(_deviceSerIndex, bitsPerSample);
 
   pinPeripheral(_sckPin, PIO_COM);
   pinPeripheral(_fsPin, PIO_COM);
-
-  if (mode == I2S_RIGHT_JUSTIFIED_MODE) {
-    i2sd.setSlotAdjustedRight(_deviceSerIndex);
-  } else {
-    i2sd.setSlotAdjustedLeft(_deviceSerIndex);
-  }
 
   i2sd.setClockUnit(_deviceSerIndex,_deviceClkIndex);
 

@@ -231,6 +231,17 @@ public:
     return (void*)&i2s.DATA[index].reg;
   }
 
+  inline void setFsInv(int index, bool inv )
+  {
+    i2s.CLKCTRL[index].bit.FSINV  = inv ? 1 : 0;
+    i2s.CLKCTRL[index].bit.FSOUTINV  = inv ? 1 : 0;  
+  }
+
+  inline void setTxUnderunMode( int index, bool same )
+  {
+    i2s.SERCTRL[index].bit.TXSAME = same ? 1 : 0;
+  }
+
 private:
   volatile I2s &i2s;
 };
