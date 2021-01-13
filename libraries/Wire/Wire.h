@@ -71,10 +71,10 @@ class TwoWire : public Stream
     bool transmissionBegun;
 
     // RX Buffer
-    RingBufferN<64> rxBuffer;
+    RingBufferN<32> rxBuffer;
 
     //TX buffer
-    RingBufferN<192> txBuffer;
+    RingBufferN<144> txBuffer;
     uint8_t txAddress;
 
     // Callback user functions
