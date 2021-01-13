@@ -22,7 +22,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define I2S_BUFFER_SIZE   (8 * 1024)
+#define I2S_BUFFER_SIZE   (1152 * 8)
 #define I2S_BUFFER_NUM    2
 
 class I2SDoubleBuffer
