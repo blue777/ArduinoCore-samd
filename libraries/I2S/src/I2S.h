@@ -46,7 +46,7 @@ public:
   // the device index and pins must map to the "COM" pads in Table 6-1 of the datasheet 
   I2SClass(uint8_t deviceSerIndex=I2S_DEVICE_SER, uint8_t deviceClkIndex=I2S_DEVICE_CLK, uint8_t clockGenerator=I2S_CLOCK_GENERATOR, uint8_t sdPin=PIN_I2S_SD, uint8_t sckPin=PIN_I2S_SCK, uint8_t fsPin=PIN_I2S_FS);
 
-  int begin(int mode, long sampleRate, int bitsPerSample, bool driveClock);
+  int begin(int mode, long sampleRate, int bitsPerData, int bitsPerSlot, bool driveClock);
   // the SCK and FS pins are driven as outputs using the sample rate
   int begin(int mode, long sampleRate, int bitsPerSample);
   // the SCK and FS pins are inputs, other side controls sample rate
@@ -117,7 +117,8 @@ private:
   uint8_t _fsPin;
 
   i2s_state_t		_state;
-  int8_t			_bitsPerSample;
+  uint8_t			  _bitsPerData;
+  uint8_t			  _bitsPerSlot;
   I2S_DMA           _dma;
   DmacDescriptor*   _dmaDesc;
   I2SDoubleBuffer	_doubleBuffer;

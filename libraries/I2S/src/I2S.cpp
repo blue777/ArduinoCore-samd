@@ -48,7 +48,8 @@ I2SClass::I2SClass(uint8_t deviceSerIndex, uint8_t deviceClkIndex, uint8_t clock
   _dma(this),
   _state(I2S_STATE_IDLE),
   _dmaChannel(-1),
-  _bitsPerSample(0),
+  _bitsPerData(0),
+  _bitsPerSlot(0),
   _dmaTransferInProgress(false),
 
   _onTransmit(NULL),
@@ -60,16 +61,16 @@ I2SClass::I2SClass(uint8_t deviceSerIndex, uint8_t deviceClkIndex, uint8_t clock
 int I2SClass::begin(int mode, long sampleRate, int bitsPerSample)
 {
   // master mode (driving clock and frame select pins - output)
-  return begin(mode, sampleRate, bitsPerSample, true);
+  return begin(mode, sampleRate, bitsPerSample, bitsPerSample,  true);
 }
 
 int I2SClass::begin(int mode, int bitsPerSample)
 {
   // slave mode (not driving clock and frame select pin - input)
-  return begin(mode, 0, bitsPerSample, false);
+  return begin(mode, 0, bitsPerSample, bitsPerSample, false);
 }
 
-int I2SClass::begin(int mode, long sampleRate, int bitsPerSample, bool driveClock)
+int I2SClass::begin(int mode, long sampleRate, int bitsPerData, int bitsPerSlot, bool driveClock)
 {
   if (_state != I2S_STATE_IDLE) {
     return 0;
@@ -86,11 +87,24 @@ int I2SClass::begin(int mode, long sampleRate, int bitsPerSample, bool driveCloc
       return 0;
   }
 
-  switch (bitsPerSample) {
+  switch (bitsPerData) {
     case 8:
     case 16:
     case 32:
-      _bitsPerSample = bitsPerSample;
+      _bitsPerData = bitsPerData;
+      break;
+
+    default:
+      // invalid bits per sample
+      return 0;
+  }
+
+  switch (bitsPerSlot) {
+    case 8:
+    case 16:
+    case 24:
+    case 32:
+      _bitsPerSlot = bitsPerSlot;
       break;
 
     default:
@@ -126,7 +140,7 @@ int I2SClass::begin(int mode, long sampleRate, int bitsPerSample, bool driveCloc
 
   if (driveClock) {
     // set up clock
-    enableClock(sampleRate * 2 * bitsPerSample);
+    enableClock(sampleRate * 2 * _bitsPerSlot);
 
     i2sd.setSerialClockSelectMasterClockDiv(_deviceClkIndex);
     i2sd.setFrameSyncSelectSerialClockDiv(_deviceClkIndex);
@@ -160,8 +174,8 @@ int I2SClass::begin(int mode, long sampleRate, int bitsPerSample, bool driveCloc
 
   i2sd.setTxUnderunMode(_deviceSerIndex, true);
   i2sd.setNumberOfSlots(_deviceClkIndex, 1);
-  i2sd.setSlotSize(_deviceClkIndex, bitsPerSample);
-  i2sd.setDataSize(_deviceSerIndex, bitsPerSample);
+  i2sd.setSlotSize(_deviceClkIndex, _bitsPerSlot);
+  i2sd.setDataSize(_deviceSerIndex, _bitsPerData);
   i2sd.setClockUnit(_deviceSerIndex,_deviceClkIndex);
 
   pinPeripheral(_sckPin, PIO_COM);
@@ -238,7 +252,7 @@ int I2SClass::available()
       _dmaDesc,
       i2sd.data(_deviceSerIndex),                // move data from here
       _doubleBuffer.write_buffer_lock(),
-      writable / (_bitsPerSample >> 3) );
+      writable / (_bitsPerData >> 3) );
 
     _dma.startJob();
   }
@@ -263,13 +277,13 @@ int I2SClass::read()
 
   sample.b32 = 0;
 
-  read(&sample, _bitsPerSample / 8);
+  read(&sample, _bitsPerData / 8);
 
-  if (_bitsPerSample == 32) {
+  if (_bitsPerData == 32) {
     return sample.b32;
-  } else if (_bitsPerSample == 16) {
+  } else if (_bitsPerData == 16) {
     return sample.b16;
-  } else if (_bitsPerSample == 8) {
+  } else if (_bitsPerData == 8) {
     return sample.b8;
   } else {
     return 0;
@@ -286,18 +300,18 @@ int I2SClass::peek()
   // disable interrupts,
   __disable_irq();
 
-  _doubleBuffer.peek(&sample, _bitsPerSample / 8);
+  _doubleBuffer.peek(&sample, _bitsPerData / 8);
 
   if (enableInterrupts) {
     // re-enable the interrupts
     __enable_irq();
   }
 
-  if (_bitsPerSample == 32) {
+  if (_bitsPerData == 32) {
     return sample.b32;
-  } else if (_bitsPerSample == 16) {
+  } else if (_bitsPerData == 16) {
     return sample.b16;
-  } else if (_bitsPerSample == 8) {
+  } else if (_bitsPerData == 8) {
     return sample.b8;
   } else {
     return 0;
@@ -351,7 +365,7 @@ void		I2SClass::write_buffer_release( size_t length )
       _dmaDesc,
       _doubleBuffer.read_buffer_lock(),                // move data from here
       i2sd.data(_deviceSerIndex),
-      avail / (_bitsPerSample >> 3) );
+      avail / (_bitsPerData >> 3) );
 
     _dma.startJob();
   }
@@ -385,7 +399,7 @@ int I2SClass::read(void* buffer, size_t size)
       _dmaDesc,
       i2sd.data(_deviceSerIndex),                // move data from here
       _doubleBuffer.write_buffer_lock(),
-      writable / (_bitsPerSample >> 3) );
+      writable / (_bitsPerData >> 3) );
 
     _dma.startJob();
   }
@@ -441,7 +455,7 @@ size_t I2SClass::write(const void *buffer, size_t size)
       _dmaDesc,
       _doubleBuffer.read_buffer_lock(),                // move data from here
       i2sd.data(_deviceSerIndex),
-      avail / (_bitsPerSample >> 3) );
+      avail / (_bitsPerData >> 3) );
 
     _dma.startJob();
   }
@@ -525,8 +539,8 @@ void I2SClass::enableTransmitter()
   _dmaDesc = _dma.addDescriptor(
     _doubleBuffer.read_buffer_lock(),                // move data from here
     i2sd.data(_deviceSerIndex),
-    _doubleBuffer.availableForRead() / (_bitsPerSample >> 3),            // this many...
-    (enum dma_beat_size)(_bitsPerSample >> 4),  //  DMA_BEAT_SIZE_WORD,                  // bytes/hword/words
+    _doubleBuffer.availableForRead() / (_bitsPerData >> 3),            // this many...
+    (enum dma_beat_size)(_bitsPerData >> 4),  //  DMA_BEAT_SIZE_WORD,                  // bytes/hword/words
     true,                                // increment source addr?
     false,                                // increment dest addr?
     DMA_ADDRESS_INCREMENT_STEP_SIZE_1, 
@@ -548,8 +562,8 @@ void I2SClass::enableReceiver()
   _dmaDesc = _dma.addDescriptor(
       i2sd.data(_deviceSerIndex),                // move data from here
       _doubleBuffer.write_buffer_lock(),
-      _doubleBuffer.availableForWrite() / (_bitsPerSample >> 3),   // this many...
-      (enum dma_beat_size)(_bitsPerSample >> 4),  // DMA_BEAT_SIZE_WORD,                  // bytes/hword/words
+      _doubleBuffer.availableForWrite() / (_bitsPerData >> 3),   // this many...
+      (enum dma_beat_size)(_bitsPerData >> 4),  // DMA_BEAT_SIZE_WORD,                  // bytes/hword/words
       false,                               // increment source addr?
       true);                               // increment dest addr?
 
@@ -570,7 +584,7 @@ void I2SClass::onTransferComplete(void)
         _dmaDesc,
         _doubleBuffer.read_buffer_lock(),                // move data from here
         i2sd.data(_deviceSerIndex),
-        avail / (_bitsPerSample >> 3) );
+        avail / (_bitsPerData >> 3) );
 
       _dma.startJob();
     } else {
@@ -593,7 +607,7 @@ void I2SClass::onTransferComplete(void)
         _dmaDesc, 
         i2sd.data(_deviceSerIndex),                // move data from here
         _doubleBuffer.write_buffer_lock(),
-        avail / (_bitsPerSample >> 3) );
+        avail / (_bitsPerData >> 3) );
 
       _dma.startJob();
     } else {
