@@ -159,21 +159,17 @@ int I2SClass::begin(int mode, long sampleRate, int bitsPerSample, bool driveCloc
   }
 
   i2sd.setTxUnderunMode(_deviceSerIndex, true);
-
   i2sd.setNumberOfSlots(_deviceClkIndex, 1);
   i2sd.setSlotSize(_deviceClkIndex, bitsPerSample);
   i2sd.setDataSize(_deviceSerIndex, bitsPerSample);
+  i2sd.setClockUnit(_deviceSerIndex,_deviceClkIndex);
 
   pinPeripheral(_sckPin, PIO_COM);
   pinPeripheral(_fsPin, PIO_COM);
-
-  i2sd.setClockUnit(_deviceSerIndex,_deviceClkIndex);
-
   pinPeripheral(_sdPin, PIO_COM);
 
   // done configure enable
   i2sd.enable();
-
   _doubleBuffer.reset();
 
   return 1;
@@ -190,9 +186,14 @@ void I2SClass::end()
     _dmaDesc  = NULL;
   }
 
+  write( (int32_t)0 );
+  write( (int32_t)0 );
+
   _state = I2S_STATE_IDLE;
   _dmaTransferInProgress = false;
+  _beginCount--;
 
+#if 0
   i2sd.disableSerializer(_deviceSerIndex);
   i2sd.disableClockUnit(_deviceClkIndex);
 
@@ -202,8 +203,6 @@ void I2SClass::end()
   pinMode(_sckPin, INPUT);
 
   disableClock();
-
-  _beginCount--;
 
   if (_beginCount == 0) {
     i2sd.disable();
@@ -215,6 +214,7 @@ void I2SClass::end()
     PM->APBCMASK.reg &= ~PM_APBCMASK_I2S;
 #endif
   }
+#endif
 }
 
 int I2SClass::available()
