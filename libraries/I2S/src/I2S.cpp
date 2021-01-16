@@ -167,6 +167,7 @@ int I2SClass::begin(int mode, long sampleRate, int bitsPerData, int bitsPerSlot,
 
   case I2S_PHILIPS_MODE:
   default:
+    i2sd.setFsInv(_deviceClkIndex,true);
     i2sd.setSlotAdjustedLeft(_deviceSerIndex);
     i2sd.set1BitDelay(_deviceClkIndex);
     break;
